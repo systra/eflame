@@ -19,7 +19,7 @@ rebar compile
 
 ### Usage
 
-1. Collect tracing data
+* Collect tracing data
 
 ```erlang
 > eflame:apply(normal_with_children, "stacks.out", my_module, awesome_calculation, []).
@@ -36,7 +36,7 @@ For tracing selected processes use:
 > eflame:stop().
 ```
 
-2. Process tracing results
+* Process tracing results
 
 ```sh
 $ stack_to_flame.sh < stacks.out > flame.svg
