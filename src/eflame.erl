@@ -1,5 +1,7 @@
 -module(eflame).
--export([apply/2,
+-export([start/1,
+         stop/2,
+         apply/2,
          apply/3,
          apply/4,
          apply/5]).
@@ -9,6 +11,16 @@
 
 -define(DEFAULT_MODE, normal_with_children).
 -define(DEFAULT_OUTPUT_FILE, "stacks.out").
+
+start(Pids) ->
+    Tracer = spawn_tracer(),
+    start_trace(Tracer, Pids, ?DEFAULT_MODE),
+    Tracer.
+
+stop(Tracer, Pids) ->
+    {ok, Bytes} = stop_trace(Tracer, Pids),
+    ok = file:write_file(?DEFAULT_OUTPUT_FILE, Bytes),
+    ok.
 
 apply(F, A) ->
     apply1(?DEFAULT_MODE, ?DEFAULT_OUTPUT_FILE, {F, A}).
@@ -25,9 +37,9 @@ apply(Mode, OutputFile, M, F, A) ->
 apply1(Mode, OutputFile, {Fun, Args}) ->
     Tracer = spawn_tracer(),
 
-    start_trace(Tracer, self(), Mode),
+    start_trace(Tracer, [self()], Mode),
     Return = (catch apply_fun(Fun, Args)),
-    {ok, Bytes} = stop_trace(Tracer, self()),
+    {ok, Bytes} = stop_trace(Tracer, [self()]),
 
     ok = file:write_file(OutputFile, Bytes),
     Return.
@@ -37,15 +49,15 @@ apply_fun({M, F}, A) ->
 apply_fun(F, A) ->
     erlang:apply(F, A).
 
-start_trace(Tracer, Target, Mode) ->
+start_trace(Tracer, Targets, Mode) ->
     MatchSpec = [{'_', [], [{message, {{cp, {caller}}}}]}],
     erlang:trace_pattern(on_load, MatchSpec, [local]),
     erlang:trace_pattern({'_', '_', '_'}, MatchSpec, [local]),
-    erlang:trace(Target, true, [{tracer, Tracer} | trace_flags(Mode)]),
+    [erlang:trace(Target, true, [{tracer, Tracer} | trace_flags(Mode)]) || Target <- Targets],
     ok.
 
-stop_trace(Tracer, Target) ->
-    erlang:trace(Target, false, [all]),
+stop_trace(Tracer, Targets) ->
+    [erlang:trace(Target, false, [all]) || Target <- Targets],
     Tracer ! {dump_bytes, self()},
 
     Ret = receive {bytes, B} -> {ok, B}
