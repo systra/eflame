@@ -1,12 +1,10 @@
-{application, eflame,
- [
-  {description, ""},
+{application, eflame, [
+  {description, "Flame Graph Profiler"},
   {vsn, git},
   {registered, []},
   {applications, [
-                  kernel,
-                  stdlib
-                 ]},
-  {mod, { eflame_app, []}},
-  {env, []}
+    kernel,
+    stdlib
+  ]},
+  {modules, [eflame]}
  ]}.

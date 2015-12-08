@@ -9,7 +9,17 @@ tracing changes are available under [Scott Lystig Fritchie's](https://github.com
 It also contains [amazing peeks inside Riak](https://github.com/slfritchie/eflame/blob/master/README-Riak-Example.md).
 Make sure to check out his talk, [Actively Measuring And Profiling Erlang Code](http://www.snookles.com/erlang/ef2015/slf-presentation.html).
 
-Usage example: https://github.com/proger/active/commit/81e7e40c9dc5a4666742636ea4c5dfafc41508a5
+### Bulding
+
+To build the library:
+
+```erlang
+rebar compile
+```
+
+### Usage
+
+1. Collect tracing data
 
 ```erlang
 > eflame:apply(normal_with_children, "stacks.out", my_module, awesome_calculation, []).
@@ -18,6 +28,15 @@ Usage example: https://github.com/proger/active/commit/81e7e40c9dc5a4666742636ea
 > eflame:apply(fun awesome_calculation/0, []). % same as above, when called in my_module.erl
 > eflame:apply(normal, "stacks.out", my_module, awesome_calculation, []). % won't trace children
 ```
+
+For tracing selected processes use:
+
+```erlang
+> eflame:start([pid(0,122,0), whereis(registered_proc)]).
+> eflame:stop().
+```
+
+2. Process tracing results
 
 ```sh
 $ stack_to_flame.sh < stacks.out > flame.svg

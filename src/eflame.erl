@@ -1,23 +1,30 @@
 -module(eflame).
+
 -export([start/1,
-         stop/2,
+         stop/0,
          apply/2,
          apply/3,
          apply/4,
          apply/5]).
 
 -define(RESOLUTION, 1000). %% us
--record(dump, {stack=[], us=0, acc=[]}). % per-process state
+
+-record(dump, {stack = [],
+               us = 0,
+               acc = []}). % per-process state
 
 -define(DEFAULT_MODE, normal_with_children).
 -define(DEFAULT_OUTPUT_FILE, "stacks.out").
 
-start(Pids) ->
+start(Pids = [P|_]) when is_list(Pids), is_pid(P) ->
     Tracer = spawn_tracer(),
-    start_trace(Tracer, Pids, ?DEFAULT_MODE),
-    Tracer.
+    put(tracer, Tracer),
+    put(traced_pids, Pids),
+    start_trace(Tracer, Pids, ?DEFAULT_MODE).
 
-stop(Tracer, Pids) ->
+stop() ->
+    Tracer = get(tracer),
+    Pids = get(traced_pids),
     {ok, Bytes} = stop_trace(Tracer, Pids),
     ok = file:write_file(?DEFAULT_OUTPUT_FILE, Bytes),
     ok.
@@ -36,11 +43,9 @@ apply(Mode, OutputFile, M, F, A) ->
 
 apply1(Mode, OutputFile, {Fun, Args}) ->
     Tracer = spawn_tracer(),
-
     start_trace(Tracer, [self()], Mode),
     Return = (catch apply_fun(Fun, Args)),
     {ok, Bytes} = stop_trace(Tracer, [self()]),
-
     ok = file:write_file(OutputFile, Bytes),
     Return.
 
@@ -61,8 +66,8 @@ stop_trace(Tracer, Targets) ->
     Tracer ! {dump_bytes, self()},
 
     Ret = receive {bytes, B} -> {ok, B}
-    after 5000 -> {error, timeout}
-    end,
+          after 5000 -> {error, timeout}
+          end,
 
     exit(Tracer, normal),
     Ret.
@@ -86,39 +91,34 @@ trace_listener(State) ->
         Term ->
             trace_ts = element(1, Term),
             PidS = element(2, Term),
-
             PidState = case dict:find(PidS, State) of
-                {ok, [Ps]} -> Ps;
-                error -> #dump{}
-            end,
-
+                           {ok, [Ps]} -> Ps;
+                           error -> #dump{}
+                       end,
             NewPidState = trace_proc_stream(Term, PidState),
-
             D1 = dict:erase(PidS, State),
             D2 = dict:append(PidS, NewPidState, D1),
             trace_listener(D2)
     end.
 
 us({Mega, Secs, Micro}) ->
-    Mega*1000*1000*1000*1000 + Secs*1000*1000 + Micro.
+    Mega * 1000 * 1000 * 1000 *1000 + Secs * 1000 * 1000 + Micro.
 
-new_state(#dump{us=Us, acc=Acc} = State, Stack, Ts) ->
-    %io:format("new state: ~p ~p ~p~n", [Us, length(Stack), Ts]),
+new_state(#dump{us =Us, acc = Acc} = State, Stack, Ts) ->
     UsTs = us(Ts),
     case Us of
-        0 -> State#dump{us=UsTs, stack=Stack};
+        0 -> State#dump{us = UsTs, stack = Stack};
         _ when Us > 0 ->
             Diff = us(Ts) - Us,
             NOverlaps = Diff div ?RESOLUTION,
             Overlapped = NOverlaps * ?RESOLUTION,
-            %Rem = Diff - Overlapped,
             case NOverlaps of
                 X when X >= 1 ->
                     StackRev = lists:reverse(Stack),
                     Stacks = [StackRev || _ <- lists:seq(1, NOverlaps)],
-                    State#dump{us=Us+Overlapped, acc=lists:append(Stacks, Acc), stack=Stack};
+                    State#dump{us = Us + Overlapped, acc = lists:append(Stacks, Acc), stack = Stack};
                 _ ->
-                    State#dump{stack=Stack}
+                    State#dump{stack = Stack}
             end
     end.
 
@@ -181,4 +181,3 @@ intercalate(Sep, Xs) -> lists:concat(intersperse(Sep, Xs)).
 intersperse(_, []) -> [];
 intersperse(_, [X]) -> [X];
 intersperse(Sep, [X | Xs]) -> [X, Sep | intersperse(Sep, Xs)].
-
